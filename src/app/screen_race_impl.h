@@ -722,6 +722,7 @@ private:
     std::vector<std::string> race_music_files_;
     int user_music_index_ = -1;
     u16 music_chord_prev_ = 0;
+    double music_chord_repeat_timer_ = 0.0;
     int scripted_kind_ = 0;
     race::TitleClock title_clock_;
     race::ReplayMarkTimer mark_timer_;
