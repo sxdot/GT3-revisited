@@ -34,7 +34,7 @@ void SDLCALL on_dialog(void*, const char* const* files, int) {
 }
 
 const SDL_DialogFileFilter kOpenFilters[] = {
-    {"Saves (GT3 Revisited, PS2)", "sav;psu;ps2;mcd"},
+    {"Saves (GT3 Revisited, PS2)", "sav;psu;ps2;mcd;raw"},
     {"All files", "*"},
 };
 const SDL_DialogFileFilter kExportFilters[] = {

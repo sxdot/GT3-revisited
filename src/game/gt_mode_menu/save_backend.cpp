@@ -148,6 +148,15 @@ std::string export_target(const std::string& out, bool* card) {
     return base.find('.') == std::string::npos ? out + ".psu" : out;
 }
 
+// `path` with its extension replaced (after the last path separator): the .psu export's
+// companion .raw and a raw import's companion .psu.
+std::string with_extension(const std::string& path, const char* ext) {
+    const size_t slash = path.find_last_of("/\\");
+    const size_t dot = path.find_last_of('.');
+    const bool has_ext = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+    return (has_ext ? path.substr(0, dot) : path) + ext;
+}
+
 int save_page_run(SavePage::Mode m, SavePage::Op op, const SavePage::File& f, const std::string& arg) {
     MenuState& ms = menu_state();
     GtModeSession* s = S();
@@ -297,7 +306,8 @@ int save_page_run(SavePage::Mode m, SavePage::Op op, const SavePage::File& f, co
         if (!write) return SavePage::Ok;
         return lib.remove(f.id) ? SavePage::Ok : SavePage::WriteError;
     case SavePage::OpExport: {
-        // To the PS2: a .psu or a memory-card image (PCSX2 .ps2) holding this save.
+        // To the PS2: a .psu or a memory-card image (PCSX2 .ps2) holding this save, plus the
+        // bare save GT3 Save Editor reads, next to it.
         std::optional<GameState> st;
         if (f.current) st = live;
         else st = read_save(f.id, &err);
@@ -312,11 +322,25 @@ int save_page_run(SavePage::Mode m, SavePage::Op op, const SavePage::File& f, co
             return SavePage::WriteError;
         }
         LOG_INFO("gt mode: exported %s", out.c_str());
+        // The save editor's file: the same save without the container, already set to edit.
+        try {
+            const std::string raw_out = with_extension(out, ".raw");
+            if (!write_host_file(raw_out, export_ps2_save_raw(*st, s->gt().data())))
+                throw FormatError("cannot write " + raw_out);
+            LOG_INFO("gt mode: exported %s", raw_out.c_str());
+        } catch (const std::exception& e) {
+            LOG_WARN("gt mode: raw export failed: %s", e.what());
+        }
         return SavePage::Ok;
     }
     case SavePage::OpImport: {
         // Another save into the library: a native save from elsewhere or a PS2 save.
         GameState st;
+        // A save GT3 Save Editor wrote back: keep its bytes and also build the .psu the
+        // PS2 can load, next to it (the .psu converter's repack), so fields this
+        // reimplementation does not track survive.
+        const bool raw_input = is_raw_ps2_save_path(arg);
+        std::optional<Bytes> raw_bytes = raw_input ? read_host_file(arg) : std::nullopt;
         try {
             st = read_any_save(arg, s->gt().data());
         } catch (const std::exception& e) {
@@ -331,6 +355,16 @@ int save_page_run(SavePage::Mode m, SavePage::Op op, const SavePage::File& f, co
             if (base.empty() || base == kPs2GameDir) base = "PS2 GAME";
         }
         if (!write) return SavePage::Ok;
+        if (raw_bytes && arg.rfind("content://", 0) != 0) {
+            try {
+                const std::string psu = with_extension(arg, ".psu");
+                Bytes b = export_ps2_save_container_raw(*raw_bytes, st, s->gt().data_ptr(), ms.reader, false);
+                if (!write_host_file(psu, b)) throw FormatError("cannot write " + psu);
+                LOG_INFO("gt mode: repacked %s", psu.c_str());
+            } catch (const std::exception& e) {
+                LOG_WARN("gt mode: raw repack failed: %s", e.what());
+            }
+        }
         std::string np;
         return lib.create(std::move(st), lib.unique_name(base), &np, &err) ? SavePage::Ok : SavePage::WriteError;
     }

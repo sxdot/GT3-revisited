@@ -1097,6 +1097,21 @@ TEST(gtmode_disc_ps2_save_containers) {
     for (const fs::path& p : {dir / "card" / kPs2GameDir, dir / "card" / kPs2GameDir / kPs2GameDir})
         CHECK(import_ps2_save_path(p.string(), *data).garage.size() == 1);
     CHECK(read_host_file((dir / "card" / kPs2GameDir / "icon.sys").string())->size() == 964);
+    // The save editor's raw file: header + payload, no alignment padding; a .psu built
+    // around it keeps those bytes and imports, and the raw file is recognised as such.
+    const Bytes raw = export_ps2_save_raw(gt.state(), *data);
+    CHECK(raw.size() == size_t(rd32(raw, 0)) + rd32(raw, 4));
+    CHECK(raw.size() < export_ps2_save(gt.state(), *data).size());
+    CHECK(import_ps2_save(raw, *data).garage.size() == 1);
+    const std::string raw_path = (dir / "game.raw").string();
+    CHECK(write_host_file(raw_path, raw));
+    CHECK(is_raw_ps2_save_path(raw_path));
+    CHECK(!is_raw_ps2_save_path((dir / "game.psu").string()));
+    CHECK(!is_raw_ps2_save_path((dir / "game.ps2").string()));
+    const std::string repacked = (dir / "repacked.psu").string();
+    CHECK(write_host_file(repacked, export_ps2_save_container_raw(raw, gt.state(), data, read, false)));
+    CHECK(import_ps2_save_path(repacked, *data).garage.size() == 1);
+    CHECK(import_ps2_save_path(repacked, *data).credits == gt.state().credits);
     fs::remove_all(dir);
 }
 

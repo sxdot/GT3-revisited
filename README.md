@@ -3,6 +3,7 @@
 > **Changes in this fork:**
 > - **In-race music controls** – Hold D-pad Left/Right to cycle through race music tracks (custom MP3s in `music/` and disc soundtrack) with automatic repeat while held.
 > - **Controller rumble** – Added force feedback/rumble for tire grip loss while driving.
+> - **GT3 Save Editor integration** – "Export to PS2" now also writes a companion `.raw` save (next to the `.psu`) that GT3 Save Editor can open directly, and the import dialog accepts the edited `.raw`, writing the matching `.psu` back out for the PS2.
 
 An open-source reimplementation of the *Gran Turismo 3 A-Spec* engine for
 modern platforms: **Windows, macOS, Linux, Android and Meta Quest (VR)**.

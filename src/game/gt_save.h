@@ -47,6 +47,9 @@ GameState import_ps2_save(ByteSpan file, const GtData& data);
 // GAMEDATA file from a state (fields this reimplementation does not track
 // are written as a new game has them).
 Bytes export_ps2_save(const GameState& s, const GtData& data);
+// The same file trimmed to header + payload (no 64-byte alignment padding): the "raw"
+// save GT3 Save Editor reads and writes (what the .psu converter extracts).
+Bytes export_ps2_save_raw(const GameState& s, const GtData& data);
 
 // The original's memory-card save directory for the game file (gt_mode §12.2):
 // BASCUS-97102GAMEDATA/ {BASCUS-97102GAMEDATA, icon.sys, icon0.ico, thumbnail}.
@@ -68,8 +71,9 @@ std::vector<Ps2SaveFile> export_ps2_save_files(const GameState& s, std::shared_p
 // image (PCSX2 .ps2 / .mcd, with or without ECC). Throws FormatError.
 GameState import_ps2_save_path(const std::string& path, const GtData& data);
 // `out` ending in .psu: a .psu; in .ps2 / .mcd: a new card image (with ECC) holding
-// only this save; otherwise a folder: <out>/BASCUS-97102GAMEDATA/... (e.g. a PCSX2
-// folder memory card). Throws FormatError.
+// only this save; in .raw: the bare save GT3 Save Editor reads (header + payload);
+// otherwise a folder: <out>/BASCUS-97102GAMEDATA/... (e.g. a PCSX2 folder memory card).
+// Throws FormatError.
 void export_ps2_save_path(const GameState& s, std::shared_ptr<const GtData> data, const GtData::Reader& read,
                           const std::string& out);
 
@@ -77,6 +81,16 @@ void export_ps2_save_path(const GameState& s, std::shared_ptr<const GtData> data
 // e.g. for a path from a save dialog that has no extension. Throws FormatError.
 Bytes export_ps2_save_container(const GameState& s, std::shared_ptr<const GtData> data, const GtData::Reader& read,
                                 bool card);
+
+// A .psu (`card` false) or card image (true) holding `raw` byte for byte (the file GT3 Save
+// Editor wrote back), with the disc's icon files and a thumbnail from `s`. Unlike
+// export_ps2_save_container this keeps fields the reimplementation does not track.
+Bytes export_ps2_save_container_raw(ByteSpan raw, const GameState& s, std::shared_ptr<const GtData> data,
+                                    const GtData::Reader& read, bool card);
+
+// True when `path` is a bare PS2 save file (what GT3 Save Editor reads and writes), not a
+// .psu, a card image, a save folder or a native GT3 Revisited save.
+bool is_raw_ps2_save_path(const std::string& path);
 
 // The game save's options block (0x888 bytes, gt_mode §12.2) fields of view mode 1's replay pad
 // (presentation §G3): +0x114 the race-sound level of the music's marked sections (Up / Down,

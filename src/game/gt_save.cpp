@@ -1045,8 +1045,11 @@ Bytes ps2_thumbnail(const GameState& s, std::shared_ptr<const GtData> data) {
     return t;
 }
 
-std::vector<Ps2SaveFile> export_ps2_save_files(const GameState& s, std::shared_ptr<const GtData> data,
-                                               const GtData::Reader& read) {
+namespace {
+
+// icon0.ico and icon.sys for the save directory (the disc's icon, filled in as the
+// original does).
+std::vector<Ps2SaveFile> ps2_icon_files(const GtData::Reader& read) {
     std::optional<Bytes> sys = read("menu/icon/icon.sys"), icon = read("menu/icon/ICON_a_spec.ico");
     if (!sys || sys->size() != 964 || std::memcmp(sys->data(), "PS2D", 4) != 0 || !icon)
         throw FormatError("disc: menu/icon/icon.sys or ICON_a_spec.ico missing");
@@ -1065,9 +1068,24 @@ std::vector<Ps2SaveFile> export_ps2_save_files(const GameState& s, std::shared_p
     std::vector<Ps2SaveFile> files;
     files.push_back({"icon0.ico", std::move(*icon)});
     files.push_back({"icon.sys", std::move(y)});
+    return files;
+}
+
+} // namespace
+
+std::vector<Ps2SaveFile> export_ps2_save_files(const GameState& s, std::shared_ptr<const GtData> data,
+                                               const GtData::Reader& read) {
+    std::vector<Ps2SaveFile> files = ps2_icon_files(read);
     files.push_back({kPs2GameDir, export_ps2_save(s, *data)});
     files.push_back({"thumbnail", ps2_thumbnail(s, data)});
     return files;
+}
+
+Bytes export_ps2_save_raw(const GameState& s, const GtData& data) {
+    Bytes f = export_ps2_save(s, data);
+    const size_t n = size_t(rd32(f, 0)) + rd32(f, 4);
+    if (n < f.size()) f.resize(n);
+    return f;
 }
 
 namespace {
@@ -1132,12 +1150,38 @@ Bytes export_ps2_save_container(const GameState& s, std::shared_ptr<const GtData
     return card ? ps2::make_card({dir}) : ps2::write_psu(dir);
 }
 
+Bytes export_ps2_save_container_raw(ByteSpan raw, const GameState& s, std::shared_ptr<const GtData> data,
+                                    const GtData::Reader& read, bool card) {
+    ps2::McDir dir;
+    dir.name = kPs2GameDir;
+    for (Ps2SaveFile& f : ps2_icon_files(read)) dir.files.push_back({f.name, std::move(f.data)});
+    dir.files.push_back({kPs2GameDir, Bytes(raw.begin(), raw.end())});
+    dir.files.push_back({"thumbnail", ps2_thumbnail(s, std::move(data))});
+    return card ? ps2::make_card({dir}) : ps2::write_psu(dir);
+}
+
+bool is_raw_ps2_save_path(const std::string& path) {
+    if (host_is_directory(path)) return false;
+    std::optional<Bytes> b = read_host_file(path);
+    if (!b || b->size() < kHeader) return false;
+    if (ps2::is_card_image(*b)) return false;
+    const bool psu_entry =
+        b->size() >= 0x400 && std::memcmp(b->data() + 0x40, kPs2GameDir, std::strlen(kPs2GameDir) + 1) == 0;
+    if (b->size() >= 0x200 && (ends_with_ci(path, ".psu") || psu_entry)) return false;
+    // A native GT3 Revisited save is text.
+    static const char kMagic[] = "GT3R-GTMODE";
+    if (b->size() >= sizeof kMagic - 1 && std::memcmp(b->data(), kMagic, sizeof kMagic - 1) == 0) return false;
+    return true;
+}
+
 void export_ps2_save_path(const GameState& s, std::shared_ptr<const GtData> data, const GtData::Reader& read,
                           const std::string& out) {
-    ps2::McDir dir = ps2_save_dir(s, std::move(data), read);
     auto write = [](const std::string& p, ByteSpan b) {
         if (!write_host_file(p, b)) throw FormatError("cannot write " + p);
     };
+    // The save editor's bare save: header + payload only.
+    if (ends_with_ci(out, ".raw")) return write(out, export_ps2_save_raw(s, *data));
+    ps2::McDir dir = ps2_save_dir(s, std::move(data), read);
     if (ends_with_ci(out, ".psu")) return write(out, ps2::write_psu(dir));
     if (ends_with_ci(out, ".ps2") || ends_with_ci(out, ".mcd")) return write(out, ps2::make_card({dir}));
     std::string folder = out + "/" + kPs2GameDir;
