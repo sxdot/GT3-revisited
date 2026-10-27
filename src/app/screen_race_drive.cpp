@@ -660,20 +660,22 @@ void RaceScreen::update_drive(App& app, double dt) {
     const u16 race_pressed = u16(pad.buttons & ~race_prev_);
     race_prev_ = pad.buttons;
     auto rpressed = [&](PadButton b) { return (race_pressed & (1u << unsigned(b))) != 0; };
-    // Hold Left/Right on the menu pad to cycle through music tracks.
+    // Hold RB/R1 plus Left/Right on the menu pad to cycle through music tracks.
+    // Without RB/R1 the dpad steers normally.
     const PadState& music_pad = app.input().pad(0);
-    const bool music_left = music_pad.down(PadButton::Left);
-    const bool music_right = music_pad.down(PadButton::Right);
+    const bool music_r1 = music_pad.down(PadButton::R1);
+    const bool music_left = music_pad.down(PadButton::Left) && music_r1;
+    const bool music_right = music_pad.down(PadButton::Right) && music_r1;
     const u16 chord_now = u16((music_left ? 1 : 0) | (music_right ? 2 : 0));
     const bool music_chord = chord_now != 0;
     if (chord_now != music_chord_prev_) {
-        if (chord_now && !(music_left && music_right)) {
+        if (chord_now) {
             change_user_music(app, music_right ? 1 : -1);
             music_chord_repeat_timer_ = 0.45;
         } else {
             music_chord_repeat_timer_ = 0.0;
         }
-    } else if (music_chord && !(music_left && music_right)) {
+    } else if (music_chord) {
         music_chord_repeat_timer_ -= dt;
         if (music_chord_repeat_timer_ <= 0.0) {
             change_user_music(app, music_right ? 1 : -1);
