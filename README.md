@@ -1,5 +1,9 @@
 # GT3 Revisited
 
+> **Changes in this fork:**
+> - **In-race music controls** – Hold D-pad Left/Right to cycle through race music tracks (custom MP3s in `music/` and disc soundtrack) with automatic repeat while held.
+> - **Controller rumble** – Added force feedback/rumble for tire grip loss while driving.
+
 An open-source reimplementation of the *Gran Turismo 3 A-Spec* engine for
 modern platforms: **Windows, macOS, Linux, Android and Meta Quest (VR)**.
 
