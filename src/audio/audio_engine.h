@@ -9,8 +9,11 @@
 #include <SDL3/SDL_audio.h>
 
 #include <memory>
+#include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace gt3r {
@@ -38,6 +41,10 @@ public:
 
     // Streams an .ads file through the VFS (mods may replace it) at request level `volume`.
     bool play_music(Vfs& vfs, const std::string& path, bool loop, float volume = 1.0f);
+    // Plays a user-provided MP3 file.
+    bool play_external_music(const std::string& path, float volume = 1.0f);
+    // Apply any MP3 that finished decoding on the background worker. Call once per frame.
+    void update();
     // Plays sequence `index` of music/music.seq with music/music.ins (loaded
     // on first use through the VFS) at request level `volume`. Sequences loop forever.
     bool play_sequence(Vfs& vfs, int index, float volume = 1.0f);
@@ -85,6 +92,21 @@ public:
 private:
     bool load_sequences(Vfs& vfs);
     void stop_stream();
+    void invalidate_external_decode();
+    void decode_external_music();
+
+    struct ExternalMusicRequest {
+        std::string path;
+        float volume = 1.0f;
+        u64 generation = 0;
+    };
+    struct ExternalMusicResult {
+        std::string path;
+        float volume = 1.0f;
+        u64 generation = 0;
+        std::shared_ptr<std::vector<s16>> samples;
+        int sample_rate = 0;
+    };
 
     static void SDLCALL feed(void* user, SDL_AudioStream* stream, int additional, int total);
     static void SDLCALL feed_voices(void* user, SDL_AudioStream* stream, int additional, int total);
@@ -93,10 +115,21 @@ private:
     mutable std::mutex mutex_;
     std::unique_ptr<AdsStream> music_;
     std::shared_ptr<Bytes> music_data_; // backing store when not streamed from disc
+    std::shared_ptr<std::vector<s16>> external_music_; // decoded user track, stereo 44.1 kHz
+    size_t external_music_pos_ = 0;
+    int external_music_rate_ = 44100;
     double music_length_ = 0.0;
     float music_volume_ = 0.8f;
     float stream_level_ = 1.0f; // the current stream request's level
     bool music_finished_ = false;
+
+    std::mutex external_decode_mutex_;
+    std::condition_variable external_decode_cv_;
+    std::optional<ExternalMusicRequest> external_decode_request_;
+    std::optional<ExternalMusicResult> external_decode_result_;
+    u64 external_decode_generation_ = 0;
+    bool external_decode_stopping_ = false;
+    std::thread external_decode_thread_;
 
     VoiceMixer voices_;
     Sequencer sequencer_;
